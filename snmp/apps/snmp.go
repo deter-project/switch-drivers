@@ -157,7 +157,12 @@ func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 		maxMe(&widths[1], len(v.RemotePortName))
 	}
 
-	f := `%2d <==> %-` + strconv.Itoa(widths[0]) + `s %` + strconv.Itoa(widths[1]) + `s [%s] %s`
+	f :=
+		`%2d <==> %-` +
+			strconv.Itoa(widths[0]) +
+			`s %` +
+			strconv.Itoa(widths[1]) +
+			`s [%s] %s`
 
 	for _, v := range nbrs {
 		log.Printf(f,

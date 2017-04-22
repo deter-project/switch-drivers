@@ -41,9 +41,8 @@ func NewSwitchControllerSnmp(address string) (*SwitchControllerSnmp, error) {
 func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 
 	/*
-		TODO This fails with snmpd. Have brought this up with the list
-				 until this gets resolved on that end using walk instead
-				 as per below
+		TODO This fails with snmpd. Have brought this up with the mailing list.
+				 Until this gets resolved on that end, using walk instead as per below
 
 		numIfx, err := getCounter(c.Snmp, "1.3.6.1.2.1.2.1.0")
 		if err != nil {
