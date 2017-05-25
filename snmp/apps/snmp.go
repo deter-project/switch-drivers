@@ -33,6 +33,7 @@ import (
 	"github.com/fatih/color"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 )
 
@@ -121,10 +122,23 @@ func maxMe(a *int, b int) {
 	}
 }
 
+type SortedInterfaces []dsnmp.Interface
+
+func (xs SortedInterfaces) Len() int { return len(xs) }
+func (xs SortedInterfaces) Less(i, j int) bool {
+	return xs[i].BridgeIndex < xs[j].BridgeIndex
+}
+func (xs SortedInterfaces) Swap(i, j int) {
+	xs[i], xs[j] = xs[j], xs[i]
+}
+
 // produce a textural representation of a switch
 func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 
-	ifxs, err := c.GetInterfaces()
+	ifxs_, err := c.GetInterfaces()
+	ifxs := SortedInterfaces(ifxs_)
+	sort.Sort(ifxs)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -178,7 +192,12 @@ func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 
 // produce a textual representation of an Interface.
 func showInterface(i dsnmp.Interface) string {
-	s := fmt.Sprintf("%d %s ", i.Index, i.Label)
+	s := fmt.Sprintf("[%d]", i.BridgeIndex)
+	if i.BridgeIndex != 0 {
+		s = bold(s)
+	}
+	s += fmt.Sprintf("(%d) %s ", i.Index, i.Label)
+
 	if i.Kind == 6 {
 		s += "ethernet "
 	} else if i.Kind == 161 {
@@ -250,12 +269,12 @@ func vlanCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
 	case "create":
 		err := c.CreateVlan(number)
 		if err != nil {
-			log.Fatal("%v", err)
+			log.Fatalf("%v", err)
 		}
 	case "delete":
 		err := c.DeleteVlan(number)
 		if err != nil {
-			log.Fatal("%v", err)
+			log.Fatalf("%v", err)
 		}
 	case "port":
 		portCmd(c, args[1:])
@@ -295,13 +314,13 @@ func accessCmd(c *dsnmp.SwitchControllerSnmp, ports []string, number string) {
 	ports_ := extractNumbers(ports)
 	number_, err := strconv.Atoi(number)
 	if err != nil {
-		log.Fatal("%s: %s is not a valid vlan number", redb("error"))
+		log.Fatalf("%s: %s is not a valid vlan number", redb("error"))
 	}
 
 	err = c.SetPortAccess(ports_, number_)
 
 	if err != nil {
-		log.Fatal("setting port access failed: %v", err)
+		log.Fatalf("setting port access failed: %v", err)
 	}
 
 }
@@ -315,7 +334,7 @@ func trunkCmd(c *dsnmp.SwitchControllerSnmp, ports []string, numbers []string) {
 	err := c.SetPortTrunk(ports_, numbers_)
 
 	if err != nil {
-		log.Fatal("setting port trunk failed: %v", err)
+		log.Fatalf("setting port trunk failed: %v", err)
 	}
 
 }
@@ -328,7 +347,7 @@ func clearCmd(c *dsnmp.SwitchControllerSnmp, ports []string) {
 	err := c.ClearPort(ports_)
 
 	if err != nil {
-		log.Fatal("clearing port failed: %v", err)
+		log.Fatalf("clearing port failed: %v", err)
 	}
 
 }

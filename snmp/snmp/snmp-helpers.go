@@ -151,6 +151,9 @@ func createRow(snmp *gosnmp.GoSNMP, oid string) error {
 		log.Printf("%#v", pkt)
 		return err
 	}
+	if pkt.Error != 0 {
+		log.Printf("object creation failed (%d)", pkt.Error)
+	}
 
 	return nil
 
@@ -180,6 +183,10 @@ func setOctetString(snmp *gosnmp.GoSNMP, oid string, value []byte) error {
 /// The following functions provide convinence accessors and legible semantics
 /// for frequently used snmp OIDS
 
+const (
+	interfaceBridgeIndexOid = ".1.3.6.1.2.1.17.1.4.1.2"
+)
+
 func interfacePropertyOid(x int) string {
 
 	return fmt.Sprintf(".1.3.6.1.2.1.2.2.1.%d", x)
@@ -200,13 +207,13 @@ func staticVlanPropertyOid(x int) string {
 
 func vlanEgressOid(x int) string {
 
-	return fmt.Sprintf("%s.4.%d", staticVlanPropertyOid(2), x)
+	return fmt.Sprintf("%s.%d", staticVlanPropertyOid(2), x)
 
 }
 
 func vlanAccessOid(x int) string {
 
-	return fmt.Sprintf("%s.4.%d", staticVlanPropertyOid(4), x)
+	return fmt.Sprintf("%s.%d", staticVlanPropertyOid(4), x)
 
 }
 
