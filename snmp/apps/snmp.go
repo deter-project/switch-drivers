@@ -10,6 +10,7 @@
  *		snmp host command
  *		commands:
  *			show
+ *			vlan list
  *			vlan create id
  *			vlan delete id
  *			vlan port [index] set access vlan-number
@@ -86,6 +87,7 @@ func usage() string {
 
 	meta := fmt.Sprintf("%s %s", blue("snmp"), green("host command"))
 	show := fmt.Sprintf("%s", blue("show"))
+	vlanList := fmt.Sprintf("%s", blue("vlan list"))
 	vlanCreate := fmt.Sprintf("%s %s", blue("vlan create"), green("id"))
 	vlanDelete := fmt.Sprintf("%s %s", blue("vlan delete"), green("id"))
 
@@ -102,6 +104,7 @@ func usage() string {
 		meta + "\n" +
 		"  " + bold("commands:") + " \n" +
 		"    " + show + "\n" +
+		"    " + vlanList + "\n" +
 		"    " + vlanCreate + "\n" +
 		"    " + vlanDelete + "\n" +
 		"    " + setAccess + "\n" +
@@ -233,26 +236,48 @@ func showVlan(v dsnmp.Vlan) string {
 	return s
 }
 
+func listVlans(c *dsnmp.SwitchControllerSnmp) {
+	vlans, err := c.GetVlans()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, v := range vlans {
+		log.Printf("%d %s", v.Index, v.Name)
+	}
+
+}
+
 // top level vlan command implementation
 func vlanCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
 
-	if len(args) < 2 {
+	if len(args) < 1 {
 		log.Fatal(usage())
 	}
 
-	number, err := strconv.Atoi(args[1])
-	if err != nil {
-		log.Printf("%s %s", red("invalid vlan number"), args[1])
-		log.Fatal(usage())
+	getNum := func() int {
+		if len(args) < 2 {
+			log.Fatal(usage())
+		}
+		number, err := strconv.Atoi(args[1])
+		if err != nil {
+			log.Printf("%s %s", red("invalid vlan number"), args[1])
+			log.Fatal(usage())
+			return -1
+		}
+		return number
 	}
 
 	switch args[0] {
+	case "list":
+		listVlans(c)
 	case "create":
+		number := getNum()
 		err := c.CreateVlan(number)
 		if err != nil {
 			log.Fatal("%v", err)
 		}
 	case "delete":
+		number := getNum()
 		err := c.DeleteVlan(number)
 		if err != nil {
 			log.Fatal("%v", err)
