@@ -13,6 +13,8 @@ package snmp
 import (
 	"fmt"
 	"github.com/soniah/gosnmp"
+	"math"
+	"strconv"
 )
 
 ///            ----------------------------------------------------------------
@@ -50,6 +52,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		}
 	*/
 
+	//bridge_ifx_map := make(map[int]*Interface)
+	//device_ifx_map := make(map[int]*
+
 	numIfx := 0
 	err := walkf(
 		c.Snmp,
@@ -66,13 +71,38 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		return result, nil
 	}
 
+	devidx := make(map[int]int)
+
 	//indices
 	err = walkf(
 		c.Snmp,
 		interfacePropertyOid(1),
 		gosnmp.Integer,
 		func(i int, v gosnmp.SnmpPDU) error {
-			result[i].Index = v.Value.(int)
+			idx := v.Value.(int)
+			result[i].Index = idx
+			devidx[idx] = i
+			return nil
+		})
+
+	//bridge indices
+	err = walkf(
+		c.Snmp,
+		interfaceBridgeIndexOid,
+		gosnmp.Integer,
+		func(i int, v gosnmp.SnmpPDU) error {
+			//extract the index from the oid
+			idx := v.Value.(int)
+			d_idx, ok := devidx[idx]
+			if ok {
+				suffix := v.Name[len(interfaceBridgeIndexOid)+1:]
+				fmt.Printf("%s - %s\n", v.Name, suffix)
+				index, err := strconv.Atoi(suffix)
+				if err != nil {
+					return err
+				}
+				result[d_idx].BridgeIndex = index
+			}
 			return nil
 		})
 
@@ -91,7 +121,7 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		".1.3.6.1.2.1.31.1.1.1.18",
 		gosnmp.OctetString,
 		func(i int, v gosnmp.SnmpPDU) error {
-			result[i].Label = string(v.Value.([]byte))
+			result[i].Label += " " + string(v.Value.([]byte))
 			return nil
 		})
 
@@ -248,6 +278,14 @@ func (c *SwitchControllerSnmp) GetVlans() ([]Vlan, error) {
 		gosnmp.OctetString,
 		func(i int, v gosnmp.SnmpPDU) error {
 			result[i].Name = string(v.Value.([]byte))
+
+			//extract the index from the oid
+			suffix := v.Name[len(staticVlanPropertyOid(1))+1:]
+			index, err := strconv.Atoi(suffix)
+			if err != nil {
+				return err
+			}
+			result[i].Index = index
 			return nil
 		})
 
@@ -292,7 +330,22 @@ func (c *SwitchControllerSnmp) SetPortAccess(ports []int, number int) error {
 		}
 	}
 
-	return fmt.Errorf("vlan %d does not exist", number)
+	//an existing vlan as not found, so let's make one
+	bridge_size, err := getCounter(c.Snmp, ".1.3.6.1.2.1.17.1.2.0")
+	if err != nil {
+		return err
+	}
+	portmap_size := int(math.Ceil(float64(bridge_size) / 8.0))
+	portmap := make([]byte, portmap_size)
+	for _, p := range ports {
+		SetPort(p-1, portmap)
+		SetPort(p-1, portmap)
+	}
+	setOctetString(c.Snmp, vlanEgressOid(number), portmap)
+	setOctetString(c.Snmp, vlanAccessOid(number), portmap)
+	return nil
+
+	//return fmt.Errorf("vlan %d does not exist", number)
 
 }
 
@@ -345,8 +398,8 @@ func (c *SwitchControllerSnmp) ClearPort(ports []int) error {
 
 // An Interface represents an interface on a switch.
 type Interface struct {
-	Label                              string
-	Index, Kind, AdminStatus, OpStatus int
+	Label                                           string
+	Index, BridgeIndex, Kind, AdminStatus, OpStatus int
 }
 
 // A Vlan represents an 802.1Q virtual lan bridge object on a switch
