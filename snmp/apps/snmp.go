@@ -56,6 +56,7 @@ var bold = color.New(color.Bold).SprintFunc()
 func main() {
 
 	log.SetFlags(0)
+	log.SetOutput(os.Stdout)
 
 	// get the minimal set of arguments and initialize the switch controller
 	args := os.Args[1:]
@@ -93,13 +94,36 @@ func usage() string {
 	vlanDelete := fmt.Sprintf("%s %s", blue("vlan delete"), green("id"))
 
 	setAccess := fmt.Sprintf("%s %s %s %s",
-		blue("vlan port"), green("[index]"), blue("set access"), green("vlan-number"))
+		blue("vlan port"),
+		green("[bridge-index]"),
+		blue("set access"),
+		green("vlan-number"))
 
 	setTrunk := fmt.Sprintf("%s %s %s %s",
-		blue("vlan port"), green("[index]"), blue("set trunk"), green("[vlan-number]"))
+		blue("vlan port"),
+		green("[bridge-index]"),
+		blue("set trunk"),
+		green("[vlan-number]"))
 
 	clearPort := fmt.Sprintf("%s %s %s",
-		blue("vlan port"), green("[index]"), blue("clear"))
+		blue("vlan port"), green("[bridge-index]"), blue("clear"))
+
+	ifFormat := fmt.Sprintf("%s(%s) '%s' %s %s %s",
+		bold("[bridge-index]"),
+		"device-index",
+		"label",
+		"type",
+		green("admin-status"),
+		yellow("op-status"),
+	)
+
+	vlanFormat :=
+		"vid vlan-name\n" +
+			"      egress ports: [bridge-index list]\n" +
+			"      access ports: [bridge-index list]"
+
+	neighborFormat :=
+		"local-device-index <===> remote-host remote-device[mac] remote-uname"
 
 	return redb("\nusage:\n") +
 		meta + "\n" +
@@ -116,7 +140,14 @@ func usage() string {
 		"    snmp 10.47.1.5 vlan create 101\n" +
 		"    snmp 10.47.1.5 vlan delete 101\n" +
 		"    snmp 10.47.1.5 vlan port 2 4 6 8 set access 47\n" +
-		"    snmp 10.47.1.5 vlan port 1 3 5 7 set trunk 101 201 303\n\n"
+		"    snmp 10.47.1.5 vlan port 1 3 5 7 set trunk 101 201 303\n\n" +
+		"  " + bold("output format:") + "\n" +
+		"    " + blue("interfaces") + "\n" +
+		"      " + ifFormat + "\n" +
+		"    " + blue("vlans") + "\n" +
+		"      " + vlanFormat + "\n" +
+		"    " + blue("neighbors") + "\n" +
+		"      " + neighborFormat + "\n\n"
 }
 
 func maxMe(a *int, b int) {
@@ -179,7 +210,7 @@ func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 			strconv.Itoa(widths[0]) +
 			`s %` +
 			strconv.Itoa(widths[1]) +
-			`s [%s] %s`
+			`s[%s] '%.64s'`
 
 	for _, v := range nbrs {
 		log.Printf(f,
@@ -199,7 +230,7 @@ func showInterface(i dsnmp.Interface) string {
 	if i.BridgeIndex != 0 {
 		s = bold(s)
 	}
-	s += fmt.Sprintf("(%d) %s ", i.Index, i.Label)
+	s += fmt.Sprintf("(%d) '%s' ", i.Index, i.Label)
 
 	if i.Kind == 6 {
 		s += "ethernet "
@@ -234,6 +265,30 @@ func showInterface(i dsnmp.Interface) string {
 	return s
 }
 
+func portmapToString(portmap []byte) string {
+	s := ""
+	for i := 0; i < len(portmap)*8; i++ {
+		if dsnmp.IsPortSet(i, portmap) {
+			s += fmt.Sprintf("%d ", i+1)
+		}
+	}
+	return s
+}
+
+func portmapMerge(a []byte, b []byte) ([]byte, error) {
+	if len(a) != len(b) {
+		return nil, fmt.Errorf("cannot merge portmaps of different lengths")
+	}
+
+	c := make([]byte, len(a))
+
+	for i, _ := range a {
+		c[i] = a[i] | b[i]
+	}
+
+	return c, nil
+}
+
 // produce a textual representation of a Vlan.
 func showVlan(v dsnmp.Vlan) string {
 	s := fmt.Sprintf("%d %s\n", v.Index, v.Name)
@@ -261,7 +316,11 @@ func listVlans(c *dsnmp.SwitchControllerSnmp) {
 		log.Fatal(err)
 	}
 	for _, v := range vlans {
-		log.Printf("%d %s", v.Index, v.Name)
+		allPorts, err := portmapMerge(v.AccessPorts, v.EgressPorts)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("%s %d %s", v.Name, v.Index, portmapToString(allPorts))
 	}
 
 }

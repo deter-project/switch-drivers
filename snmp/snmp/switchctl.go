@@ -96,7 +96,7 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 			d_idx, ok := devidx[idx]
 			if ok {
 				suffix := v.Name[len(interfaceBridgeIndexOid)+1:]
-				fmt.Printf("%s - %s\n", v.Name, suffix)
+				//fmt.Printf("%s - %s\n", v.Name, suffix)
 				index, err := strconv.Atoi(suffix)
 				if err != nil {
 					return err
