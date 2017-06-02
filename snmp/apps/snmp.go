@@ -16,6 +16,24 @@
  *			vlan port [index] set access vlan-number
  *			vlan port [index] set trunk [vlan-number]
  *			vlan port [index] clear
+ *
+ *----------------------------------------------------------
+ *
+ *			vlan list
+ *			interface list
+ *
+ *			vlan VID set trunk [PORT]
+ *			vlan VID set access [PORT]
+ *			vlan VID clear [PORT]
+ *			vlan VID clear-all
+ *
+ *			interface INTERFACE set trunk [VID]
+ *			interface INTERFACE set access VID
+ *			interface INTERFACE clear [VID]
+ *			interface INTERFACE clear-all
+ *
+ *----------------------------------------------------------
+ *
  *		examples:
  *			snmp 10.47.1.5 show
  *			snmp 10.47.1.5 vlan create 101
@@ -75,6 +93,8 @@ func main() {
 	switch command {
 	case "show":
 		showSwitch(s)
+	case "interface":
+		interfaceCmd(s, args[2:])
 	case "vlan":
 		vlanCmd(s, args[2:])
 	default:
@@ -84,29 +104,216 @@ func main() {
 
 }
 
+//##
+// ### Interface Commands ~~~~~~~
+//##
+func interfaceCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
+	if len(args) == 1 && args[0] == "list" {
+		listInterfaces(c)
+		return
+	}
+
+	bridge_index, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Printf("%s %s", red("invalid bridge index"), args[0])
+		log.Fatal(usage())
+	}
+
+	if len(args) == 2 && args[1] == "clear-all" {
+		c.ClearPorts([]int{bridge_index})
+		return
+	}
+	if len(args) >= 3 {
+		switch args[1] {
+		case "set":
+			interfaceSetCmd(c, bridge_index, args[2:])
+			return
+		case "clear":
+			interfaceClearCmd(c, bridge_index, args[2:])
+			return
+		}
+	}
+	log.Fatal(usage())
+}
+
+func toInts(ss []string) []int {
+	vs := make([]int, len(ss))
+	for i, a := range ss {
+		v, err := strconv.Atoi(a)
+		if err != nil {
+			log.Printf("%s %s", red("invalid integer value"), a)
+			log.Fatal(usage())
+		}
+		vs[i] = v
+	}
+	return vs
+}
+
+func interfaceSetCmd(c *dsnmp.SwitchControllerSnmp,
+	bridge_index int, args []string) {
+	if len(args) < 2 {
+		log.Fatal(usage())
+	}
+	vids := toInts(args[1:])
+	switch args[0] {
+	case "trunk":
+		c.SetPortTrunk([]int{bridge_index}, vids)
+	case "access":
+		c.SetPortAccess([]int{bridge_index}, vids[0])
+	}
+}
+
+func interfaceClearCmd(c *dsnmp.SwitchControllerSnmp,
+	bridge_index int, args []string) {
+	vids := make([]int, len(args))
+	for i, a := range args {
+		vid, err := strconv.Atoi(a)
+		if err != nil {
+			log.Printf("%s %s", red("invalid vid"), a)
+			log.Fatal(usage())
+		}
+		vids[i] = vid
+	}
+
+	c.ClearPortVlans(bridge_index, vids)
+}
+
+//##
+// ### Vlan Commands ~~~~~~~
+//##
+func vlanCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
+
+	if len(args) < 1 {
+		log.Fatal(usage())
+	}
+
+	getNum := func(i int) int {
+		if len(args) < i+1 {
+			log.Fatal(usage())
+		}
+		number, err := strconv.Atoi(args[i])
+		if err != nil {
+			log.Printf("%s %s", red("invalid vlan number"), args[i])
+			log.Fatal(usage())
+			return -1
+		}
+		return number
+	}
+
+	if len(args) == 1 && args[0] == "list" {
+		listVlans(c)
+		return
+	}
+
+	if len(args) == 2 {
+		if args[1] == "clear-all" {
+			c.ClearVlans([]int{getNum(0)})
+			return
+		}
+		switch args[0] {
+		case "create":
+			number := getNum(1)
+			err := c.CreateVlan(number)
+			if err != nil {
+				log.Fatalf("%v", err)
+			}
+			return
+		case "delete":
+			number := getNum(1)
+			err := c.DeleteVlan(number)
+			if err != nil {
+				log.Fatalf("%v", err)
+			}
+			return
+		default:
+			log.Fatal(usage())
+		}
+	}
+
+	vid := getNum(0)
+	switch args[1] {
+	case "set":
+		vlanSetCmd(c, vid, args[2:])
+	case "clear":
+		vlanClearCmd(c, vid, args[2:])
+	}
+
+}
+
+func vlanSetCmd(c *dsnmp.SwitchControllerSnmp, vid int, args []string) {
+
+	if len(args) < 2 {
+		log.Fatal(usage())
+	}
+	switch args[0] {
+	case "trunk":
+		interfaces := toInts(args[1:])
+		c.SetPortTrunk(interfaces, []int{vid})
+	case "access":
+	}
+
+}
+
+func vlanClearCmd(c *dsnmp.SwitchControllerSnmp, vid int, args []string) {
+}
+
 // present information to the user on how to use this application
 func usage() string {
 
 	meta := fmt.Sprintf("%s %s", blue("snmp"), green("host command"))
 	show := fmt.Sprintf("%s", blue("show"))
+
 	vlanList := fmt.Sprintf("%s", blue("vlan list"))
-	vlanCreate := fmt.Sprintf("%s %s", blue("vlan create"), green("id"))
-	vlanDelete := fmt.Sprintf("%s %s", blue("vlan delete"), green("id"))
+	interfaceList := fmt.Sprintf("%s", blue("interface list"))
 
-	setAccess := fmt.Sprintf("%s %s %s %s",
-		blue("vlan port"),
-		green("[bridge-index]"),
-		blue("set access"),
-		green("vlan-number"))
+	vlanCreate := fmt.Sprintf("%s %s", blue("vlan create"), green("vid"))
+	vlanDelete := fmt.Sprintf("%s %s", blue("vlan delete"), green("vid"))
 
-	setTrunk := fmt.Sprintf("%s %s %s %s",
-		blue("vlan port"),
-		green("[bridge-index]"),
+	vlanSetTrunk := fmt.Sprintf("%s %s %s %s",
+		blue("vlan"),
+		green("vid"),
 		blue("set trunk"),
-		green("[vlan-number]"))
+		green("[interface]"))
 
-	clearPort := fmt.Sprintf("%s %s %s",
-		blue("vlan port"), green("[bridge-index]"), blue("clear"))
+	vlanSetAccess := fmt.Sprintf("%s %s %s %s",
+		blue("vlan"),
+		green("vid"),
+		blue("set access"),
+		green("[interface]"))
+
+	vlanClear := fmt.Sprintf("%s %s %s %s",
+		blue("vlan"),
+		green("vid"),
+		blue("clear"),
+		green("[interface]"))
+
+	vlanClearAll := fmt.Sprintf("%s %s %s",
+		blue("vlan"),
+		green("vid"),
+		blue("clear-all"))
+
+	interfaceSetTrunk := fmt.Sprintf("%s %s %s %s",
+		blue("interface"),
+		green("bridge-index"),
+		blue("set trunk"),
+		green("[vid]"))
+
+	interfaceSetAccess := fmt.Sprintf("%s %s %s %s",
+		blue("interface"),
+		green("bridge-index"),
+		blue("set access"),
+		green("vid"))
+
+	interfaceClear := fmt.Sprintf("%s %s %s %s",
+		blue("interface"),
+		green("bridge-index"),
+		blue("clear"),
+		green("[vid]"))
+
+	interfaceClearAll := fmt.Sprintf("%s %s %s",
+		blue("interface"),
+		green("bridge-index"),
+		blue("clear-all"))
 
 	ifFormat := fmt.Sprintf("%s(%s) '%s' %s %s %s",
 		bold("[bridge-index]"),
@@ -119,8 +326,8 @@ func usage() string {
 
 	vlanFormat :=
 		"vid vlan-name\n" +
-			"      egress ports: [bridge-index list]\n" +
-			"      access ports: [bridge-index list]"
+			"      egress: [bridge-index list]\n" +
+			"      access: [bridge-index list]"
 
 	neighborFormat :=
 		"local-device-index <===> remote-host remote-device[mac] remote-uname"
@@ -128,19 +335,19 @@ func usage() string {
 	return redb("\nusage:\n") +
 		meta + "\n" +
 		"  " + bold("commands:") + " \n" +
-		"    " + show + "\n" +
+		"    " + show + "\n\n" +
 		"    " + vlanList + "\n" +
 		"    " + vlanCreate + "\n" +
 		"    " + vlanDelete + "\n" +
-		"    " + setAccess + "\n" +
-		"    " + setTrunk + "\n" +
-		"    " + clearPort + "\n" +
-		"  " + bold("examples:") + " \n" +
-		"    snmp 10.47.1.5 show\n" +
-		"    snmp 10.47.1.5 vlan create 101\n" +
-		"    snmp 10.47.1.5 vlan delete 101\n" +
-		"    snmp 10.47.1.5 vlan port 2 4 6 8 set access 47\n" +
-		"    snmp 10.47.1.5 vlan port 1 3 5 7 set trunk 101 201 303\n\n" +
+		"    " + vlanSetTrunk + "\n" +
+		"    " + vlanSetAccess + "\n" +
+		"    " + vlanClear + "\n" +
+		"    " + vlanClearAll + "\n\n" +
+		"    " + interfaceList + "\n" +
+		"    " + interfaceSetTrunk + "\n" +
+		"    " + interfaceSetAccess + "\n" +
+		"    " + interfaceClear + "\n" +
+		"    " + interfaceClearAll + "\n\n" +
 		"  " + bold("output format:") + "\n" +
 		"    " + blue("interfaces") + "\n" +
 		"      " + ifFormat + "\n" +
@@ -325,51 +532,25 @@ func listVlans(c *dsnmp.SwitchControllerSnmp) {
 
 }
 
-// top level vlan command implementation
-func vlanCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
-
-	if len(args) < 1 {
-		log.Fatal(usage())
+func listInterfaces(c *dsnmp.SwitchControllerSnmp) {
+	interfaces, err := c.GetInterfaces()
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	getNum := func() int {
-		if len(args) < 2 {
-			log.Fatal(usage())
-		}
-		number, err := strconv.Atoi(args[1])
-		if err != nil {
-			log.Printf("%s %s", red("invalid vlan number"), args[1])
-			log.Fatal(usage())
-			return -1
-		}
-		return number
-	}
-
-	switch args[0] {
-	case "list":
-		listVlans(c)
-	case "create":
-		number := getNum()
-		err := c.CreateVlan(number)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-	case "delete":
-		number := getNum()
-		err := c.DeleteVlan(number)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-	case "port":
-		portCmd(c, args[1:])
-	default:
-		log.Printf("%s %s", red("unknown vlan command"), args[0])
-		log.Fatal(usage())
+	for _, i := range interfaces {
+		log.Printf("%d %d %d %d %d",
+			i.BridgeIndex,
+			i.Index,
+			i.Kind,
+			i.AdminStatus,
+			i.OpStatus,
+		)
 	}
 
 }
 
 // vlan-port command implementation
+/*
 func portCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
 
 	for i, p := range args {
@@ -391,8 +572,10 @@ func portCmd(c *dsnmp.SwitchControllerSnmp, args []string) {
 	log.Fatal(usage())
 
 }
+*/
 
 // vlan-port set access command implementation
+/*
 func accessCmd(c *dsnmp.SwitchControllerSnmp, ports []string, number string) {
 
 	ports_ := extractNumbers(ports)
@@ -408,8 +591,10 @@ func accessCmd(c *dsnmp.SwitchControllerSnmp, ports []string, number string) {
 	}
 
 }
+*/
 
 // vlan-port set trunk command implementation
+/*
 func trunkCmd(c *dsnmp.SwitchControllerSnmp, ports []string, numbers []string) {
 
 	ports_ := extractNumbers(ports)
@@ -422,21 +607,25 @@ func trunkCmd(c *dsnmp.SwitchControllerSnmp, ports []string, numbers []string) {
 	}
 
 }
+*/
 
 // vlan-port clear command implementation
+/*
 func clearCmd(c *dsnmp.SwitchControllerSnmp, ports []string) {
 
 	ports_ := extractNumbers(ports)
 
-	err := c.ClearPort(ports_)
+	err := c.ClearPorts(ports_)
 
 	if err != nil {
 		log.Fatalf("clearing port failed: %v", err)
 	}
 
 }
+*/
 
 // a helper function to turn lists of strings into lists of numbers
+/*
 func extractNumbers(strings []string) []int {
 
 	ns := []int{}
@@ -451,3 +640,4 @@ func extractNumbers(strings []string) []int {
 
 	return ns
 }
+*/

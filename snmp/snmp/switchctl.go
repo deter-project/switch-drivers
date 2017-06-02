@@ -331,6 +331,28 @@ func (c *SwitchControllerSnmp) SetPortAccess(ports []int, number int) error {
 	}
 
 	//an existing vlan as not found, so let's make one
+	/*
+		bridge_size, err := getCounter(c.Snmp, ".1.3.6.1.2.1.17.1.2.0")
+		if err != nil {
+			return err
+		}
+		portmap_size := int(math.Ceil(float64(bridge_size) / 8.0))
+		portmap := make([]byte, portmap_size)
+		for _, p := range ports {
+			SetPort(p-1, portmap)
+			SetPort(p-1, portmap)
+		}
+		setOctetString(c.Snmp, vlanEgressOid(number), portmap)
+		setOctetString(c.Snmp, vlanAccessOid(number), portmap)
+		return nil
+	*/
+	return c.newVlan(ports, number, true)
+
+	//return fmt.Errorf("vlan %d does not exist", number)
+
+}
+
+func (c *SwitchControllerSnmp) newVlan(ports []int, number int, access bool) error {
 	bridge_size, err := getCounter(c.Snmp, ".1.3.6.1.2.1.17.1.2.0")
 	if err != nil {
 		return err
@@ -339,14 +361,12 @@ func (c *SwitchControllerSnmp) SetPortAccess(ports []int, number int) error {
 	portmap := make([]byte, portmap_size)
 	for _, p := range ports {
 		SetPort(p-1, portmap)
-		SetPort(p-1, portmap)
 	}
 	setOctetString(c.Snmp, vlanEgressOid(number), portmap)
-	setOctetString(c.Snmp, vlanAccessOid(number), portmap)
+	if access {
+		setOctetString(c.Snmp, vlanAccessOid(number), portmap)
+	}
 	return nil
-
-	//return fmt.Errorf("vlan %d does not exist", number)
-
 }
 
 // SetPortAccess sets a vlan trunk for the provided vlan numbers on the
@@ -359,13 +379,23 @@ func (c *SwitchControllerSnmp) SetPortTrunk(ports []int, numbers []int) error {
 	}
 
 	for _, number := range numbers {
+		found := false
 		for _, v := range vlans {
 			if v.Index == number {
+				found = true
 				for _, p := range ports {
 					SetPort(p-1, v.EgressPorts)
 				}
 				setOctetString(c.Snmp, vlanEgressOid(number), v.EgressPorts)
-				setOctetString(c.Snmp, vlanAccessOid(number), v.AccessPorts)
+				//setOctetString(c.Snmp, vlanAccessOid(number), v.AccessPorts)
+				break
+			}
+		}
+		//if vlan does not exist create a new one
+		if !found {
+			err = c.newVlan(ports, number, false)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -374,9 +404,8 @@ func (c *SwitchControllerSnmp) SetPortTrunk(ports []int, numbers []int) error {
 
 }
 
-// ClearPort clears the specified ports of any an all vlans on the switch
-// under control.
-func (c *SwitchControllerSnmp) ClearPort(ports []int) error {
+// ClearPorts clears the specified ports of any an all vlans on the switch.
+func (c *SwitchControllerSnmp) ClearPorts(ports []int) error {
 
 	vlans, err := c.GetVlans()
 	if err != nil {
@@ -390,6 +419,54 @@ func (c *SwitchControllerSnmp) ClearPort(ports []int) error {
 		}
 		setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
 		setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+	}
+
+	return nil
+
+}
+
+// ClearVlans clears the specified vlans from any and all ports on the switch.
+func (c *SwitchControllerSnmp) ClearVlans(vids []int) error {
+	vlans, err := c.GetVlans()
+	if err != nil {
+		return fmt.Errorf("ClearPort: GetVlans failed: %v", err)
+	}
+
+	for _, x := range vids {
+		for _, v := range vlans {
+			if v.Index == x {
+				for i, _ := range v.EgressPorts {
+					v.EgressPorts[i] = 0
+				}
+				for i, _ := range v.AccessPorts {
+					v.AccessPorts[i] = 0
+				}
+				setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
+				setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+			}
+		}
+	}
+
+	return nil
+}
+
+// ClearPortVlans clears the specified vlans from the specified port
+func (c *SwitchControllerSnmp) ClearPortVlans(port int, targets []int) error {
+	vlans, err := c.GetVlans()
+	if err != nil {
+		return fmt.Errorf("ClearPort: GetVlans failed: %v", err)
+	}
+
+	for _, t := range targets {
+		for _, v := range vlans {
+			if v.Index != t {
+				continue
+			}
+			UnsetPort(port-1, v.EgressPorts)
+			UnsetPort(port-1, v.AccessPorts)
+			setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
+			setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+		}
 	}
 
 	return nil
