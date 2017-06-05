@@ -93,6 +93,8 @@ func main() {
 	switch command {
 	case "show":
 		showSwitch(s)
+	case "show-ports":
+		showPorts(s)
 	case "interface":
 		interfaceCmd(s, args[2:])
 	case "vlan":
@@ -260,25 +262,23 @@ func vlanClearCmd(c *dsnmp.SwitchControllerSnmp, vid int, args []string) {
 // present information to the user on how to use this application
 func usage() string {
 
+	verbose := false
+
 	meta := fmt.Sprintf("%s %s", blue("snmp"), green("host command"))
 	show := fmt.Sprintf("%s", blue("show"))
+	showPorts := fmt.Sprintf("%s", blue("show-ports"))
 
 	vlanList := fmt.Sprintf("%s", blue("vlan list"))
 	interfaceList := fmt.Sprintf("%s", blue("interface list"))
 
-	vlanCreate := fmt.Sprintf("%s %s", blue("vlan create"), green("vid"))
-	vlanDelete := fmt.Sprintf("%s %s", blue("vlan delete"), green("vid"))
+	vlanCreateDelete := fmt.Sprintf("%s %s",
+		blue("vlan {create | delete}"),
+		green("vid"))
 
-	vlanSetTrunk := fmt.Sprintf("%s %s %s %s",
+	vlanSet := fmt.Sprintf("%s %s %s %s",
 		blue("vlan"),
 		green("vid"),
-		blue("set trunk"),
-		green("[interface]"))
-
-	vlanSetAccess := fmt.Sprintf("%s %s %s %s",
-		blue("vlan"),
-		green("vid"),
-		blue("set access"),
+		blue("set {trunk | access}"),
 		green("[interface]"))
 
 	vlanClear := fmt.Sprintf("%s %s %s %s",
@@ -332,29 +332,36 @@ func usage() string {
 	neighborFormat :=
 		"local-device-index <===> remote-host remote-device[mac] remote-uname"
 
-	return redb("\nusage:\n") +
+	outputFormat :=
+		"  " + bold("output format:") + "\n" +
+			"    " + blue("interfaces") + "\n" +
+			"      " + ifFormat + "\n" +
+			"    " + blue("vlans") + "\n" +
+			"      " + vlanFormat + "\n" +
+			"    " + blue("neighbors") + "\n" +
+			"      " + neighborFormat + "\n\n"
+
+	text := redb("\nusage:\n") +
 		meta + "\n" +
 		"  " + bold("commands:") + " \n" +
-		"    " + show + "\n\n" +
+		"    " + show + "\n" +
+		"    " + showPorts + "\n\n" +
 		"    " + vlanList + "\n" +
-		"    " + vlanCreate + "\n" +
-		"    " + vlanDelete + "\n" +
-		"    " + vlanSetTrunk + "\n" +
-		"    " + vlanSetAccess + "\n" +
+		"    " + vlanCreateDelete + "\n" +
+		"    " + vlanSet + "\n" +
 		"    " + vlanClear + "\n" +
 		"    " + vlanClearAll + "\n\n" +
 		"    " + interfaceList + "\n" +
 		"    " + interfaceSetTrunk + "\n" +
 		"    " + interfaceSetAccess + "\n" +
 		"    " + interfaceClear + "\n" +
-		"    " + interfaceClearAll + "\n\n" +
-		"  " + bold("output format:") + "\n" +
-		"    " + blue("interfaces") + "\n" +
-		"      " + ifFormat + "\n" +
-		"    " + blue("vlans") + "\n" +
-		"      " + vlanFormat + "\n" +
-		"    " + blue("neighbors") + "\n" +
-		"      " + neighborFormat + "\n\n"
+		"    " + interfaceClearAll + "\n\n"
+
+	if verbose {
+		text += outputFormat
+	}
+
+	return text
 }
 
 func maxMe(a *int, b int) {
@@ -399,6 +406,10 @@ func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 		log.Printf("%s\n\n", showVlan(v))
 	}
 
+	log.Printf("\n%s\n", blueb("Vlan Ports"))
+	log.Printf("%s\n", cyanb("====="))
+	showPortVlans(ifxs, vlans)
+
 	log.Printf("\n%s\n", blueb("Neighbors"))
 	log.Printf("%s\n", cyanb("========="))
 	nbrs, err := c.GetNeighbors()
@@ -427,6 +438,62 @@ func showSwitch(c *dsnmp.SwitchControllerSnmp) {
 			hex.EncodeToString(v.RemoteMac),
 			v.RemoteDescription,
 		)
+	}
+
+}
+
+func showPorts(c *dsnmp.SwitchControllerSnmp) {
+	ifxs, err := c.GetInterfaces()
+	if err != nil {
+		log.Fatal(err)
+	}
+	vlans, err := c.GetVlans()
+	if err != nil {
+		log.Fatal(err)
+	}
+	showPortVlans(ifxs, vlans)
+}
+
+func showPortVlans(ifxs []dsnmp.Interface, vlans []dsnmp.Vlan) {
+
+	num_bridge_ifxs := 0
+	for _, i := range ifxs {
+		if i.BridgeIndex > 0 {
+			num_bridge_ifxs++
+		}
+	}
+
+	if len(vlans) == 0 {
+		return
+	}
+
+	type PortVlan struct {
+		Untagged, Trunk []int
+	}
+
+	portMap := make(map[int]*PortVlan)
+	for i := 1; i <= num_bridge_ifxs; i++ {
+		portMap[i] = &PortVlan{}
+	}
+
+	for _, v := range vlans {
+
+		for i := 0; i < num_bridge_ifxs; i++ {
+			if dsnmp.IsPortSet(i, v.EgressPorts) {
+				portMap[i+1].Trunk = append(portMap[i+1].Trunk, v.Index)
+			}
+		}
+
+		for i := 0; i < num_bridge_ifxs; i++ {
+			if dsnmp.IsPortSet(i, v.AccessPorts) {
+				portMap[i+1].Untagged = append(portMap[i+1].Untagged, v.Index)
+			}
+		}
+
+	}
+
+	for i, p := range portMap {
+		log.Printf("%4d  Trunked  %v \n      Untagged %v\n\n", i, p.Trunk, p.Untagged)
 	}
 
 }
