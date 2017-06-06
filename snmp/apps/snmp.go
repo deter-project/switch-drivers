@@ -252,11 +252,24 @@ func vlanSetCmd(c *dsnmp.SwitchControllerSnmp, vid int, args []string) {
 		interfaces := toInts(args[1:])
 		c.SetPortTrunk(interfaces, []int{vid})
 	case "access":
+		interfaces := toInts(args[1:])
+		c.SetPortAccess(interfaces, vid)
 	}
 
 }
 
 func vlanClearCmd(c *dsnmp.SwitchControllerSnmp, vid int, args []string) {
+	ports := make([]int, len(args))
+	for i, a := range args {
+		port, err := strconv.Atoi(a)
+		if err != nil {
+			log.Printf("%s %s", red("invalid port"), a)
+			log.Fatal(usage())
+		}
+		ports[i] = port
+	}
+
+	c.ClearVlanPorts(vid, ports)
 }
 
 // present information to the user on how to use this application

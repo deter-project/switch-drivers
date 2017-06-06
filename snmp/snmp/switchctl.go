@@ -454,12 +454,33 @@ func (c *SwitchControllerSnmp) ClearVlans(vids []int) error {
 func (c *SwitchControllerSnmp) ClearPortVlans(port int, targets []int) error {
 	vlans, err := c.GetVlans()
 	if err != nil {
-		return fmt.Errorf("ClearPort: GetVlans failed: %v", err)
+		return fmt.Errorf("ClearPortVlans: GetVlans failed: %v", err)
 	}
 
 	for _, t := range targets {
 		for _, v := range vlans {
 			if v.Index != t {
+				continue
+			}
+			UnsetPort(port-1, v.EgressPorts)
+			UnsetPort(port-1, v.AccessPorts)
+			setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
+			setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+		}
+	}
+
+	return nil
+}
+
+func (c *SwitchControllerSnmp) ClearVlanPorts(vid int, ports []int) error {
+	vlans, err := c.GetVlans()
+	if err != nil {
+		return fmt.Errorf("ClearVlanPorts: GetVlans failed: %v", err)
+	}
+
+	for _, v := range vlans {
+		if v.Index != vid {
+			for _, port := range ports {
 				continue
 			}
 			UnsetPort(port-1, v.EgressPorts)
