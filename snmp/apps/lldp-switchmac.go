@@ -56,7 +56,7 @@ func main() {
 			hex.EncodeToString(n.RemoteMac),
 			host,
 			0,
-			n.LocalIfIndex,
+			n.BridgeIfIndex,
 			CONTROL_VLAN,
 			n.RemoteName, n.RemotePortName,
 			class,

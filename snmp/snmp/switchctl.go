@@ -161,6 +161,7 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 
 type Neighbor struct {
 	LocalIfIndex      int
+	BridgeIfIndex     int
 	RemoteMac         []byte
 	RemoteName        string
 	RemotePortName    string
@@ -171,10 +172,23 @@ type Neighbor struct {
 // At this time we gather this information by reading the LLDP tables.
 func (c *SwitchControllerSnmp) GetNeighbors() (map[int]*Neighbor, error) {
 
+	ifxs, err := c.GetInterfaces()
+	if err != nil {
+		return nil, err
+	}
 	nbrs := make(map[int]*Neighbor)
 
+	bridgeIf := func(index int) int {
+		for _, x := range ifxs {
+			if x.Index == index {
+				return x.BridgeIndex
+			}
+		}
+		return 0
+	}
+
 	//get the macs
-	err := walkf(
+	err = walkf(
 		c.Snmp,
 		".1.0.8802.1.1.2.1.4.1.1.7",
 		gosnmp.OctetString,
@@ -183,8 +197,9 @@ func (c *SwitchControllerSnmp) GetNeighbors() (map[int]*Neighbor, error) {
 			i, err := extractLLDPIndex(v.Name)
 			if err == nil {
 				nbrs[i] = &Neighbor{
-					LocalIfIndex: i,
-					RemoteMac:    mac,
+					LocalIfIndex:  i,
+					BridgeIfIndex: bridgeIf(i),
+					RemoteMac:     mac,
 				}
 				return nil
 			} else {
