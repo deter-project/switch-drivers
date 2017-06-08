@@ -480,9 +480,9 @@ func (c *SwitchControllerSnmp) ClearVlanPorts(vid int, ports []int) error {
 
 	for _, v := range vlans {
 		if v.Index != vid {
-			for _, port := range ports {
-				continue
-			}
+			continue
+		}
+		for _, port := range ports {
 			UnsetPort(port-1, v.EgressPorts)
 			UnsetPort(port-1, v.AccessPorts)
 			setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
