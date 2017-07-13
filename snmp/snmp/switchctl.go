@@ -80,6 +80,14 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		gosnmp.Integer,
 		func(i int, v gosnmp.SnmpPDU) error {
 			idx := v.Value.(int)
+			if i >= len(result) {
+				fmt.Printf(
+					"warning: the switch told us it has %d interfaces "+
+					"but this is interface # %d\n",
+					len(result), i,
+				)
+				return nil
+			}
 			result[i].Index = idx
 			devidx[idx] = i
 			return nil
@@ -112,6 +120,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		interfacePropertyOid(2),
 		gosnmp.OctetString,
 		func(i int, v gosnmp.SnmpPDU) error {
+			if i >= len(result) {
+				return nil
+			}
 			result[i].Label = string(v.Value.([]byte))
 			return nil
 		})
@@ -121,6 +132,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		".1.3.6.1.2.1.31.1.1.1.18",
 		gosnmp.OctetString,
 		func(i int, v gosnmp.SnmpPDU) error {
+			if i >= len(result) {
+				return nil
+			}
 			result[i].Label += " " + string(v.Value.([]byte))
 			return nil
 		})
@@ -131,6 +145,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		interfacePropertyOid(3),
 		gosnmp.Integer,
 		func(i int, v gosnmp.SnmpPDU) error {
+			if i >= len(result) {
+				return nil
+			}
 			result[i].Kind = v.Value.(int)
 			return nil
 		})
@@ -141,6 +158,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		interfacePropertyOid(7),
 		gosnmp.Integer,
 		func(i int, v gosnmp.SnmpPDU) error {
+			if i >= len(result) {
+				return nil
+			}
 			result[i].AdminStatus = v.Value.(int)
 			return nil
 		})
@@ -151,6 +171,9 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 		interfacePropertyOid(8),
 		gosnmp.Integer,
 		func(i int, v gosnmp.SnmpPDU) error {
+			if i >= len(result) {
+				return nil
+			}
 			result[i].OpStatus = v.Value.(int)
 			return nil
 		})
