@@ -83,7 +83,7 @@ func (c *SwitchControllerSnmp) GetInterfaces() ([]Interface, error) {
 			if i >= len(result) {
 				fmt.Printf(
 					"warning: the switch told us it has %d interfaces "+
-					"but this is interface # %d\n",
+						"but this is interface # %d\n",
 					len(result), i,
 				)
 				return nil
@@ -407,7 +407,7 @@ func (c *SwitchControllerSnmp) newVlan(ports []int, number int, access bool) err
 	return nil
 }
 
-// SetPortAccess sets a vlan trunk for the provided vlan numbers on the
+// SetPortTrunk sets a vlan trunk for the provided vlan numbers on the
 // specified ports on the switch under control.
 func (c *SwitchControllerSnmp) SetPortTrunk(ports []int, numbers []int) error {
 
@@ -451,12 +451,24 @@ func (c *SwitchControllerSnmp) ClearPorts(ports []int) error {
 	}
 
 	for _, v := range vlans {
+		egress_clear := false
+		access_clear := false
 		for _, p := range ports {
-			UnsetPort(p-1, v.EgressPorts)
-			UnsetPort(p-1, v.AccessPorts)
+			if IsPortSet(p-1, v.EgressPorts) {
+				UnsetPort(p-1, v.EgressPorts)
+				egress_clear = true
+			}
+			if IsPortSet(p-1, v.AccessPorts) {
+				UnsetPort(p-1, v.AccessPorts)
+				access_clear = true
+			}
 		}
-		setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
-		setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+		if egress_clear {
+			setOctetString(c.Snmp, vlanEgressOid(v.Index), v.EgressPorts)
+		}
+		if access_clear {
+			setOctetString(c.Snmp, vlanAccessOid(v.Index), v.AccessPorts)
+		}
 	}
 
 	return nil

@@ -1,4 +1,5 @@
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
  *
  * Deter SNMP Switch Controller Application
  * ========================================
@@ -598,6 +599,7 @@ func showVlan(v dsnmp.Vlan) string {
 }
 
 func listVlans(c *dsnmp.SwitchControllerSnmp) {
+
 	vlans, err := c.GetVlans()
 	if err != nil {
 		log.Fatal(err)
