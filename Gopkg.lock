@@ -2,12 +2,6 @@
 
 
 [[projects]]
-  branch = "master"
-  name = "github.com/alouca/gologger"
-  packages = ["."]
-  revision = "7d4b7291de9c9df1b3fe6a3d784b3675b6c0c996"
-
-[[projects]]
   name = "github.com/fatih/color"
   packages = ["."]
   revision = "507f6050b8568533fb3f5504de8e5205fa62a114"
@@ -26,10 +20,10 @@
   version = "v0.0.3"
 
 [[projects]]
+  branch = "master"
   name = "github.com/soniah/gosnmp"
   packages = ["."]
-  revision = "ecdd943d00fe0e34ea021e893b295a9ff6af0434"
-  version = "v1.0"
+  revision = "f15472a4cd6f6ea7929e4c7d9f163c49f059924f"
 
 [[projects]]
   branch = "master"
@@ -40,6 +34,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "582fb9a86678062849f5dac7669b26a940d6f59404c62d870e1dc32e2f94cc40"
+  inputs-digest = "b4a54bf8db06484744623c60053713d2125f40265c161d3f85f18a1662fc7b91"
   solver-name = "gps-cdcl"
   solver-version = 1

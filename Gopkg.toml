@@ -31,7 +31,7 @@
 
 [[constraint]]
   name = "github.com/soniah/gosnmp"
-  version = "1.0.0"
+  branch = "master"
 
 [prune]
   go-tests = true
